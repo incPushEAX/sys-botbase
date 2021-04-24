@@ -98,9 +98,15 @@ void __appInit(void)
     rc = pminfoInitialize();
 	if (R_FAILED(rc)) 
 		fatalThrow(rc);
-    rc = socketInitializeDefault();
+    // rc = socketInitializeDefault();
+    // if (R_FAILED(rc))
+    //     fatalThrow(rc);
+    //init usb instead
+    rc = usbCommsInitialize();
     if (R_FAILED(rc))
         fatalThrow(rc);
+    //init usb instead END
+
     rc = capsscInitialize();
     if (R_FAILED(rc))
         fatalThrow(rc);
@@ -119,7 +125,7 @@ void __appExit(void)
     smExit();
     audoutExit();
     timeExit();
-    socketExit();
+    //socketExit();
     viExit();
     psmExit();
 }
@@ -161,6 +167,7 @@ void makeClickSeq(char* seq)
 
 int argmain(int argc, char **argv)
 {
+    USBResponse response;
     if (argc == 0)
         return 0;
 
@@ -370,6 +377,12 @@ int argmain(int argc, char **argv)
 
     if(!strcmp(argv[0], "getTitleID")){
         MetaData meta = getMetaData();
+
+        //usb things
+        response.size = sizeof(meta.titleID);
+        response.data = &meta.titleID;
+        sendUsbResponse(response);
+
         printf("%016lX\n", meta.titleID);
     }
 
@@ -380,22 +393,44 @@ int argmain(int argc, char **argv)
         SetLanguage language = SetLanguage_ENUS;
         setGetSystemLanguage(&languageCode);   
         setMakeLanguage(languageCode, &language);
+
+        //usb things
+        response.size = sizeof(language);
+        response.data = &language;
+        sendUsbResponse(response);
+
         printf("%d\n", language);
     }
  
     if(!strcmp(argv[0], "getMainNsoBase")){
         MetaData meta = getMetaData();
+
+        //usb things
+        response.size = sizeof(meta.main_nso_base);
+        response.data = &meta.main_nso_base;
+        sendUsbResponse(response);
+
         printf("%016lX\n", meta.main_nso_base);
     }
     
     if(!strcmp(argv[0], "getBuildID")){
         MetaData meta = getMetaData();
+
+        //usb things
+        //TODO
+
         printf("%02x%02x%02x%02x%02x%02x%02x%02x\n", meta.buildID[0], meta.buildID[1], meta.buildID[2], meta.buildID[3], meta.buildID[4], meta.buildID[5], meta.buildID[6], meta.buildID[7]);
 
     }
 
     if(!strcmp(argv[0], "getHeapBase")){
         MetaData meta = getMetaData();
+
+        //usb things
+        response.size = sizeof(meta.heap_base);
+        response.data = &meta.heap_base;
+        sendUsbResponse(response);
+
         printf("%016lX\n", meta.heap_base);
     }
 
@@ -409,6 +444,11 @@ int argmain(int argc, char **argv)
 
         if (R_FAILED(rc) && debugResultCodes)
             printf("capssc, 1204: %d\n", rc);
+
+        //usb things
+        response.data = &buf[0];
+        response.size = outSize;
+        sendUsbResponse(response);
         
         u64 i;
         for (i = 0; i < outSize; i++)
@@ -713,22 +753,7 @@ void del_from_pfds(struct pollfd pfds[], int i, int *fd_count)
 
 int main()
 {
-    char *linebuf = malloc(sizeof(char) * MAX_LINE_LENGTH);
-
-    int c = sizeof(struct sockaddr_in);
-    struct sockaddr_in client;
-
-    int fd_count = 0;
-    int fd_size = 5;
-    struct pollfd *pfds = malloc(sizeof *pfds * fd_size);
-
-    int listenfd = setupServerSocket();
-    pfds[0].fd = listenfd;
-    pfds[0].events = POLLIN;
-    fd_count = 1;
-
-    int newfd;
-	
+    USBResponse response;
 	Result rc;
 	int fr_count = 0;
 	
@@ -762,64 +787,36 @@ int main()
 
     while (appletMainLoop())
     {
-        poll(pfds, fd_count, -1);
 		mutexLock(&freezeMutex);
-        for(int i = 0; i < fd_count; i++) 
-        {
-            if (pfds[i].revents & POLLIN) 
-            {
-                if (pfds[i].fd == listenfd) 
-                {
-                    newfd = accept(listenfd, (struct sockaddr *)&client, (socklen_t *)&c);
-                    if(newfd != -1)
-                    {
-                        add_to_pfds(&pfds, newfd, &fd_count, &fd_size);
-                    }else{
-                        svcSleepThread(1e+9L);
-                        close(listenfd);
-                        listenfd = setupServerSocket();
-                        pfds[0].fd = listenfd;
-                        pfds[0].events = POLLIN;
-                        break;
-                    }
-                }
-                else
-                {
-                    bool readEnd = false;
-                    int readBytesSoFar = 0;
-                    while(!readEnd){
-                        int len = recv(pfds[i].fd, &linebuf[readBytesSoFar], 1, 0);
-                        if(len <= 0)
-                        {
-                            close(pfds[i].fd);
-                            del_from_pfds(pfds, i, &fd_count);
-                            readEnd = true;
-                        }
-                        else
-                        {
-                            readBytesSoFar += len;
-                            if(linebuf[readBytesSoFar-1] == '\n'){
-                                readEnd = true;
-                                linebuf[readBytesSoFar - 1] = 0;
 
-                                fflush(stdout);
-                                dup2(pfds[i].fd, STDOUT_FILENO);
+        int len;
+        usbCommsRead(&len, sizeof(len));
 
-                                parseArgs(linebuf, &argmain);
+        char linebuf[len + 1];
 
-                                if(echoCommands){
-                                    printf("%s\n",linebuf);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
+        for(int i = 0; i < len+1; i++)
+            linebuf[i] = 0;
+
+        usbCommsRead(&linebuf, len);
+
+		//Adds necessary escape characters for pasrser
+        linebuf[len-1] = '\n';
+        linebuf[len-2] = '\r';
+
+        fflush(stdout);
+        parseArgs(linebuf, &argmain);
+
+        if(echoCommands){
+            response.size = sizeof(linebuf);
+            response.data = &linebuf;
+            sendUsbResponse(response);
         }
+        
 		fr_count = getFreezeCount(false);
 		if (fr_count == 0)
 			freeze_thr_state = Idle;
 		mutexUnlock(&freezeMutex);
+
         svcSleepThread(mainLoopSleepTime * 1e+6L);
     }
 	

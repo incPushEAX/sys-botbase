@@ -32,6 +32,13 @@ typedef struct {
     u8 state;
 } KeyData;
 
+//usb things
+typedef struct
+{
+    u64 size;
+    void* data;
+}USBResponse;
+
 #define JOYSTICK_LEFT 0
 #define JOYSTICK_RIGHT 1
 
@@ -43,6 +50,8 @@ u64 getTitleId(u64 pid);
 void getBuildID(MetaData* meta, u64 pid);
 MetaData getMetaData(void);
 
+void sendUsbResponse(USBResponse response);
+void poke(u64 offset, u64 size, u8* val);
 void poke(u64 offset, u64 size, u8* val);
 void writeMem(u64 offset, u64 size, u8* val);
 void peek(u64 offset, u64 size);

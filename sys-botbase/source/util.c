@@ -30,27 +30,6 @@ static const HidsysNotificationLedPattern breathingpattern = {
     },
 };
 
-int setupServerSocket()
-{
-    int lissock;
-    int yes = 1;
-    struct sockaddr_in server;
-    lissock = socket(AF_INET, SOCK_STREAM, 0);
-
-    setsockopt(lissock, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof(int));
-
-    server.sin_family = AF_INET;
-    server.sin_addr.s_addr = INADDR_ANY;
-    server.sin_port = htons(6000);
-
-    while (bind(lissock, (struct sockaddr *)&server, sizeof(server)) < 0)
-    {
-        svcSleepThread(1e+9L);
-    }
-    listen(lissock, 3);
-    return lissock;
-}
-
 u64 parseStringToInt(char* arg){
     if(strlen(arg) > 2){
         if(arg[1] == 'x'){

@@ -22,6 +22,15 @@ u64 keyPressSleepTime = 25;
 u64 pollRate = 17; // polling is linked to screen refresh rate (system UI) or game framerate. Most cases this is 1/60 or 1/30
 u32 fingerDiameter = 50;
 
+//usb things
+void sendUsbResponse(USBResponse response)
+{
+    usbCommsWrite((void*)&response, 4);
+
+    if (response.size > 0)
+        usbCommsWrite(response.data, response.size);
+}
+
 void attach()
 {
     u64 pid = 0;
@@ -172,6 +181,12 @@ void peek(u64 offset, u64 size)
     attach();
     readMem(out, offset, size);
     detach();
+
+    //usb things
+    USBResponse response;
+    response.size = size;
+    response.data = &out[0];
+    sendUsbResponse(response);
 
     u64 i;
     for (i = 0; i < size; i++)

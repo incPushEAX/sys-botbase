@@ -18,6 +18,7 @@ void initFreezes(void)
 void freeFreezes(void)
 {
 	free(freezes);
+	
 }
 
 int findAddrSlot(u64 addr)
